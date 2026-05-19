@@ -1,10 +1,21 @@
 import React, { useState, useRef } from 'react';
 import { Upload, Sparkles, Image as ImageIcon, Download, Loader2, ArrowRight } from 'lucide-react';
 import { generatePrompts, generateImagen3, GenerationSettings } from './lib/gemini';
+import { removeBackground } from '@imgly/background-removal';
+import * as htmlToImage from 'html-to-image';
 
 const CATEGORIES = ['Bath Mat', 'Pillow / Cushion Cover', 'Throw Blanket', 'Rug / Area Rug', 'Bedding / Duvet Cover', 'Blanket'];
 const STYLES = ['Modern Minimalist', 'Cozy & Warm', 'Luxury Premium', 'Scandinavian'];
 const ROOMS = ['Bathroom', 'Bedroom', 'Living Room', 'Kids Room'];
+
+// Define different perspective transforms for each angle
+const ANGLE_STYLES = [
+  { transform: 'scale(0.8) translateY(10%)', dropShadow: 'drop-shadow(0 20px 20px rgba(0,0,0,0.4))' }, // Top-down
+  { transform: 'perspective(1000px) rotateX(45deg) scale(0.75) translateY(20%)', dropShadow: 'drop-shadow(0 40px 20px rgba(0,0,0,0.5))' }, // 45-degree
+  { transform: 'perspective(800px) rotateX(60deg) scale(0.65) translateY(40%)', dropShadow: 'drop-shadow(0 50px 20px rgba(0,0,0,0.6))' }, // Low-angle
+  { transform: 'perspective(1200px) rotateX(30deg) scale(0.6) translateY(30%)', dropShadow: 'drop-shadow(0 30px 15px rgba(0,0,0,0.4))' }, // Wide-angle
+  { transform: 'perspective(800px) rotateX(20deg) scale(1.2) translateY(-10%)', dropShadow: 'drop-shadow(0 30px 30px rgba(0,0,0,0.4))' }, // Close-up
+];
 
 function App() {
   const [selectedCategory, setSelectedCategory] = useState(CATEGORIES[0]);
@@ -13,20 +24,23 @@ function App() {
   
   const [designFile, setDesignFile] = useState<File | null>(null);
   const [designPreview, setDesignPreview] = useState<string | null>(null);
+  const [transparentPreview, setTransparentPreview] = useState<string | null>(null);
   
   const [isGenerating, setIsGenerating] = useState(false);
   const [loadingStatus, setLoadingStatus] = useState('');
   
-  const [generatedImages, setGeneratedImages] = useState<string[]>([]);
+  const [generatedBackgrounds, setGeneratedBackgrounds] = useState<string[]>([]);
   const [generatedPrompts, setGeneratedPrompts] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const compositeRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
       setDesignFile(file);
       setDesignPreview(URL.createObjectURL(file));
+      setTransparentPreview(null); // Reset transparent preview
     }
   };
 
@@ -37,30 +51,37 @@ function App() {
     }
     
     setIsGenerating(true);
-    setGeneratedImages([]);
+    setGeneratedBackgrounds([]);
     setGeneratedPrompts([]);
     
     try {
-      setLoadingStatus('Analyzing product design with Gemini Vision...');
+      // Step 1: Remove Background
+      if (!transparentPreview) {
+        setLoadingStatus('Extracting product from background...');
+        const blob = await removeBackground(designFile);
+        setTransparentPreview(URL.createObjectURL(blob));
+      }
+
+      // Step 2: Generate Prompts for Empty Rooms
+      setLoadingStatus('Designing perfect empty environments...');
       const settings: GenerationSettings = {
         category: selectedCategory,
         style: selectedStyle,
         room: selectedRoom
       };
-      
       const prompts = await generatePrompts(designFile, settings);
       setGeneratedPrompts(prompts);
       
-      const newImages: string[] = [];
-      // Generate images one by one or in parallel. We'll do sequentially to avoid aggressive rate limits if any.
+      // Step 3: Generate Backgrounds
+      const newBackgrounds: string[] = [];
       for (let i = 0; i < prompts.length; i++) {
-        setLoadingStatus(`Generating Imagen 3 rendering ${i + 1} of 5...`);
+        setLoadingStatus(`Rendering environment ${i + 1} of 5...`);
         const imgData = await generateImagen3(prompts[i]);
-        newImages.push(imgData);
-        setGeneratedImages([...newImages]); // Update state iteratively
+        newBackgrounds.push(imgData);
+        setGeneratedBackgrounds([...newBackgrounds]);
       }
       
-      setLoadingStatus('Generation complete!');
+      setLoadingStatus('Compositing complete!');
     } catch (error: any) {
       console.error(error);
       alert(error.message || 'An error occurred during generation.');
@@ -70,15 +91,30 @@ function App() {
     }
   };
 
-  const handleDownload = (imgUrl: string, index: number) => {
-    const a = document.createElement('a');
-    a.href = imgUrl;
-    a.download = `rkd-lifestyle-${index + 1}.jpg`;
-    a.click();
+  const handleDownload = async (index: number) => {
+    const node = compositeRefs.current[index];
+    if (!node) return;
+    
+    try {
+      // Temporarily hide UI elements (like tooltip/buttons) during download
+      node.classList.add('downloading');
+      
+      const dataUrl = await htmlToImage.toJpeg(node, { quality: 0.95 });
+      
+      node.classList.remove('downloading');
+
+      const a = document.createElement('a');
+      a.href = dataUrl;
+      a.download = `rkd-lifestyle-composited-${index + 1}.jpg`;
+      a.click();
+    } catch (error) {
+      console.error("Failed to export image", error);
+      node.classList.remove('downloading');
+    }
   };
 
   const handleDownloadAll = () => {
-    generatedImages.forEach((img, idx) => handleDownload(img, idx));
+    generatedBackgrounds.forEach((_, idx) => handleDownload(idx));
   };
 
   return (
@@ -98,7 +134,7 @@ function App() {
               <h1 className="text-xl font-semibold bg-gradient-to-r from-indigo-400 to-purple-400 bg-clip-text text-transparent">
                 RKD AI Studio
               </h1>
-              <p className="text-xs text-gray-400 mt-1">Lifestyle Image Generator</p>
+              <p className="text-xs text-gray-400 mt-1">100% Accurate Lifestyle Compositor</p>
             </div>
             <Sparkles className="w-6 h-6 text-indigo-400" />
           </div>
@@ -133,7 +169,7 @@ function App() {
             <div>
               <label className="text-sm font-medium text-gray-300 mb-3 block flex items-center gap-2">
                 <div className="w-1.5 h-1.5 rounded-full bg-purple-500" />
-                Design Image
+                Design Image (Upload Original)
               </label>
               <div 
                 onClick={() => fileInputRef.current?.click()}
@@ -143,7 +179,7 @@ function App() {
               >
                 {designPreview ? (
                   <div className="relative w-full aspect-square">
-                    <img src={designPreview} alt="Design" className="w-full h-full object-cover" />
+                    <img src={transparentPreview || designPreview} alt="Design" className="w-full h-full object-contain p-4" />
                     <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                       <p className="text-sm font-medium text-white flex items-center gap-2">
                         <Upload className="w-4 h-4" /> Change Image
@@ -238,7 +274,7 @@ function App() {
               </>
             ) : (
               <>
-                Generate Professional Images
+                Generate 100% Accurate Images
                 <ArrowRight className="w-4 h-4" />
               </>
             )}
@@ -252,11 +288,11 @@ function App() {
           {/* Header */}
           <div className="h-16 border-b border-white/10 flex items-center justify-between px-6 bg-white/[0.02]">
             <div>
-              <h2 className="text-sm font-medium text-gray-200">Professional Product Photography</h2>
-              <p className="text-xs text-gray-500">5 editorial-grade images generated</p>
+              <h2 className="text-sm font-medium text-gray-200">Composited Product Photography</h2>
+              <p className="text-xs text-gray-500">Exact product placed in AI-generated environments</p>
             </div>
             
-            {generatedImages.length > 0 && (
+            {generatedBackgrounds.length > 0 && (
               <button 
                 onClick={handleDownloadAll}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg bg-white/10 hover:bg-white/20 transition-colors text-xs font-medium text-white border border-white/10"
@@ -269,49 +305,74 @@ function App() {
 
           {/* Content */}
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar">
-            {!isGenerating && generatedImages.length === 0 ? (
+            {!isGenerating && generatedBackgrounds.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center opacity-60">
                 <div className="w-20 h-20 rounded-full bg-white/5 flex items-center justify-center mb-6">
                   <ImageIcon className="w-8 h-8 text-gray-400" />
                 </div>
                 <h3 className="text-lg font-medium text-gray-300">No images yet</h3>
                 <p className="text-sm text-gray-500 mt-2 max-w-md">
-                  Upload a design and click "Generate Professional Images" to create 5 distinct, hyper-realistic lifestyle photos.
+                  Upload a design and click "Generate" to extract your product and perfectly composite it into 5 distinct, hyper-realistic lifestyle photos.
                 </p>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 
-                {/* Render already generated images */}
-                {generatedImages.map((img, i) => (
-                  <div key={i} className="group relative rounded-xl overflow-hidden border border-white/10 bg-white/5 aspect-[4/3]">
-                    <img src={img} alt={`Generated ${i+1}`} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105" />
+                {/* Render already generated composited images */}
+                {generatedBackgrounds.map((bgUrl, i) => (
+                  <div 
+                    key={i} 
+                    ref={el => compositeRefs.current[i] = el}
+                    className="group relative rounded-xl overflow-hidden border border-white/10 bg-white/5 aspect-[4/3] composite-container"
+                  >
+                    {/* The Background Layer */}
+                    <img src={bgUrl} alt={`Environment ${i+1}`} className="absolute inset-0 w-full h-full object-cover z-0" />
                     
-                    {/* Overlay gradient */}
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                    {/* The Product Layer (Overlay) */}
+                    {transparentPreview && (
+                      <div className="absolute inset-0 z-10 flex items-center justify-center pointer-events-none p-8">
+                        <img 
+                          src={transparentPreview} 
+                          alt="Extracted Product" 
+                          className="w-full h-full object-contain"
+                          style={{
+                            transform: ANGLE_STYLES[i % ANGLE_STYLES.length].transform,
+                            filter: ANGLE_STYLES[i % ANGLE_STYLES.length].dropShadow,
+                            transition: 'all 0.5s ease-in-out'
+                          }}
+                          crossOrigin="anonymous"
+                        />
+                      </div>
+                    )}
                     
-                    {/* Prompt tooltip */}
-                    <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-300">
-                      <p className="text-[10px] text-gray-300 line-clamp-3 leading-relaxed">
-                        {generatedPrompts[i]}
-                      </p>
-                    </div>
+                    {/* UI Overlay Elements (Hidden during download via .downloading CSS) */}
+                    <div className="ui-overlay">
+                      {/* Overlay gradient */}
+                      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 z-20 pointer-events-none" />
+                      
+                      {/* Prompt tooltip */}
+                      <div className="absolute bottom-0 left-0 right-0 p-4 translate-y-full group-hover:translate-y-0 transition-transform duration-300 z-30 pointer-events-none">
+                        <p className="text-[10px] text-gray-300 line-clamp-3 leading-relaxed">
+                          {generatedPrompts[i]}
+                        </p>
+                      </div>
 
-                    <button 
-                      onClick={() => handleDownload(img, i)}
-                      className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center border border-white/20 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 hover:scale-110"
-                    >
-                      <Download className="w-4 h-4" />
-                    </button>
-                    
-                    <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-black/50 backdrop-blur-md border border-white/10">
-                      <span className="text-[10px] font-medium text-gray-300">Angle {i+1}</span>
+                      <button 
+                        onClick={() => handleDownload(i)}
+                        className="absolute top-3 right-3 w-8 h-8 rounded-full bg-black/50 backdrop-blur-md flex items-center justify-center border border-white/20 text-white opacity-0 group-hover:opacity-100 transition-opacity hover:bg-black/80 hover:scale-110 z-30"
+                      >
+                        <Download className="w-4 h-4" />
+                      </button>
+                      
+                      <div className="absolute top-3 left-3 px-2.5 py-1 rounded-md bg-black/50 backdrop-blur-md border border-white/10 z-30">
+                        <span className="text-[10px] font-medium text-gray-300">Angle {i+1}</span>
+                      </div>
                     </div>
                   </div>
                 ))}
 
                 {/* Render loading placeholders if currently generating */}
-                {isGenerating && Array.from({ length: 5 - generatedImages.length }).map((_, i) => (
+                {isGenerating && Array.from({ length: 5 - generatedBackgrounds.length }).map((_, i) => (
                   <div key={`loading-${i}`} className="rounded-xl overflow-hidden border border-white/5 bg-white/5 aspect-[4/3] flex flex-col items-center justify-center relative">
                     <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-20 animate-pulse-slow" />
                     <Loader2 className="w-8 h-8 text-indigo-500/50 animate-spin mb-4" />
@@ -342,6 +403,11 @@ function App() {
         }
         .custom-scrollbar::-webkit-scrollbar-thumb:hover {
           background: rgba(255, 255, 255, 0.2);
+        }
+
+        /* Hide UI overlays when capturing the image for download */
+        .composite-container.downloading .ui-overlay {
+          display: none !important;
         }
       `}} />
     </div>

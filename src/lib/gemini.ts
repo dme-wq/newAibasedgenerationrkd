@@ -33,26 +33,31 @@ export async function generatePrompts(file: File, settings: GenerationSettings):
   const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const imagePart = await fileToGenerativePart(file);
 
-  const systemPrompt = `You are a world-class AI Prompt Engineer specializing in photorealistic product photography. 
-Your task is to analyze the provided product design image and generate exactly 5 distinct text-to-image prompts.
-The user wants to generate lifestyle images of the product. The product MUST be replicated with 100% accuracy in the final generated image.
+  const systemPrompt = `You are a world-class AI Prompt Engineer specializing in photorealistic architectural and interior photography.
+Your task is to analyze the provided product image and generate exactly 5 distinct text-to-image prompts for Imagen 4.0.
+The user wants to generate stunning, photorealistic EMPTY room settings where their product will be placed later via compositing.
 
-Product Category: ${settings.category}
+Product Category (for context): ${settings.category}
 Style Preference: ${settings.style}
 Room Setting: ${settings.room}
 
 INSTRUCTIONS:
-1. Deeply analyze the uploaded image: identify exact colors, textures, patterns, logos, and materials.
-2. Create 5 drastically different lifestyle photography prompts. They should all feature the exact product, but from different camera angles, lighting conditions, and specific placements within the ${settings.room}.
-3. The style should be strictly "${settings.style}".
-4. Write the prompts so they can be fed directly to Imagen 3.
-5. Emphasize in the prompt that the product MUST look identical to the uploaded design (describe the design deeply in each prompt).
+1. Understand the product category and size to determine the scale of the empty space needed.
+2. Create 5 drastically different, empty lifestyle photography backgrounds. The prompts MUST describe an EMPTY floor or surface in the ${settings.room} designed in the "${settings.style}" style.
+3. The space MUST be empty where the product will go. For example, if it's a bath mat, describe a beautiful bathroom floor with an empty space in front of the tub or shower.
+4. DO NOT MENTION THE PRODUCT ITSELF in the prompt! If you say "a maroon rug", Imagen will generate a rug. You must describe the room, the lighting, the floor texture, and explicitly state it is an empty floor/surface ready for an item to be placed.
+5. Provide different camera angles for the 5 prompts:
+   - Angle 1: Top-down flat lay view of the empty floor surface.
+   - Angle 2: 45-degree angle looking down at the empty space with cinematic lighting.
+   - Angle 3: Low-angle perspective looking across the empty floor towards a light source.
+   - Angle 4: Wide-angle shot showing more of the room, with a clear empty space on the floor.
+   - Angle 5: Close-up angle of the empty floor texture with beautiful shallow depth of field (bokeh) in the background.
 
 Return ONLY a valid JSON array of 5 strings. No markdown, no intro.
 Example:
 [
-  "A hyper-realistic, 8k resolution lifestyle shot of a [Category] with [exact pattern/color described] placed in a ${settings.style} ${settings.room}. The camera angle is a wide shot showing the entire room with natural sunlight pouring in from a window. Cinematic lighting, photorealistic.",
-  "An extreme close-up macro photography shot of the same [Category], highlighting the rich [texture] and [colors]. It is placed on a [surface] in a ${settings.room} setting with soft ambient lighting.",
+  "A photorealistic top-down view of an empty luxury marble floor in a ${settings.style} ${settings.room}. The floor is completely clear and empty in the center, with soft natural light coming from a window off-camera. 8k, highly detailed.",
+  "A cinematic 45-degree angle shot of an empty polished concrete floor in a ${settings.room}. The center space is completely empty. Soft, warm ambient lighting illuminates the surface.",
   ...
 ]`;
 
