@@ -30,7 +30,7 @@ async function fileToGenerativePart(file: File) {
  * Step 1: Analyze the product image and generate 5 highly specific, hyper-realistic Imagen 3 prompts.
  */
 export async function generatePrompts(file: File, settings: GenerationSettings): Promise<string[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-pro' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
   const imagePart = await fileToGenerativePart(file);
 
   const systemPrompt = `You are a world-class AI Prompt Engineer specializing in photorealistic product photography. 
