@@ -30,7 +30,7 @@ async function fileToGenerativePart(file: File) {
  * Step 1: Analyze the product image and generate 5 highly specific, hyper-realistic Imagen 3 prompts.
  */
 export async function generatePrompts(file: File, settings: GenerationSettings): Promise<string[]> {
-  const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+  const model = genAI.getGenerativeModel({ model: 'gemini-2.5-flash' });
   const imagePart = await fileToGenerativePart(file);
 
   const systemPrompt = `You are a world-class AI Prompt Engineer specializing in photorealistic product photography. 
@@ -74,10 +74,10 @@ Example:
 }
 
 /**
- * Step 2: Call Imagen 3 REST API to generate the image
+ * Step 2: Call Imagen 4 REST API to generate the image
  */
 export async function generateImagen3(prompt: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${API_KEY}`;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/imagen-4.0-generate-001:predict?key=${API_KEY}`;
   
   const response = await fetch(url, {
     method: 'POST',
